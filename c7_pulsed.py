@@ -3,22 +3,17 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from scipy.optimize import curve_fit
 
-# Embedded braibanti-fig3.csv data.
-# The first row is omitted to preserve the original skiprows=1 behavior.
-mobility_data = np.array([
-    [14.704260651629072, 1.0714285714285703],
-    [24.586466165413533, 1.8571428571428568],
-    [34.54323308270677, 3.2678571428571432],
-    [44.48621553884711, 4.142857142857142],
-])
-
-T_data_C, D_th_data_scaled = mobility_data.T
+# ---------------------- Thermophoretic mobility data ----------------------
+T_data_C, D_th_data_scaled = np.loadtxt(
+    'braibanti-fig3.csv', delimiter=',', skiprows=1
+).T
 T_data_K = T_data_C + 273.15
 D_th_data_SI = D_th_data_scaled * 1e-12
 
 print(D_th_data_SI)
 print(T_data_K)
 
+# ---------------------- Temperature profile fit ----------------------
 d = np.array([3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 5.0])
 T_C = np.array([48, 41, 35, 31, 28, 27, 26, 25])
 T = T_C + 273.15
@@ -51,6 +46,7 @@ plt.ylabel('T (K)')
 plt.legend()
 plt.show()
 
+# ---------------------- Physical parameters ----------------------
 np.random.seed(24)
 
 R = 2.05e-6
@@ -61,19 +57,18 @@ k_B = 1.3806e-23
 gamma = 6 * np.pi * eta * R
 D_t = k_B * T_ref / gamma
 
+# Fixed temperature-fit constants retained from the original simulation.
 A_fit = 47487805.196155205
 k_fit = 4.262380207691129
 C_fit = 297.5165761061297
 
-# Pulse schedule: ON then OFF each period.
+# ---------------------- Pulse schedule ----------------------
 period = 100e-6
 pulse_start = 0.0
 pulse_width = 10e-9
-
-# Cooling time constant.
 tau_cool = 100e-6
 
-# Time steps.
+# ---------------------- Time steps ----------------------
 dt_on = 1e-9
 dt_off = 1e-6
 
@@ -85,17 +80,13 @@ n_post = int(np.round((period - pulse_width) / dt_off))
 
 save_every_periods = 10
 
-# Initial position in meters.
-r0_um = 3.0
+# ---------------------- Initial position ----------------------
+r0_um = 3.35
 r = np.array([r0_um, 0.0]) * 1e-6
 positions = [r.copy()]
 
 
-def D_th(T_local):
-    """Temperature-dependent thermophoretic mobility in SI units."""
-    T_local = np.clip(T_local, T_data_K[0], T_data_K[-1])
-    return np.interp(T_local, T_data_K, D_th_data_SI)
-
+# ---------------------- Functions ----------------------
 
 def temperature_and_grad(r_xy, A_now):
     x, y = r_xy
@@ -114,6 +105,9 @@ def temperature_and_grad(r_xy, A_now):
     grad_T_local = dT_dr * np.array([ux, uy])
     return T_local, grad_T_local
 
+def D_th(T_local):
+    T_local = np.clip(T_local, T_data_K[0], T_data_K[-1])
+    return np.interp(T_local, T_data_K, D_th_data_SI)
 
 def decay_amp(A_now, dt):
     return A_now * np.exp(-dt / tau_cool)
@@ -122,7 +116,7 @@ def decay_amp(A_now, dt):
 sqrt_2D_on = np.sqrt(2.0 * D_t * dt_on)
 sqrt_2D_off = np.sqrt(2.0 * D_t * dt_off)
 
-# Simulation.
+# ---------------------- Simulation ----------------------
 A_t = 0.0
 
 for p in range(num_periods):
@@ -161,7 +155,7 @@ print('Steps per period:', n_on + n_post)
 print('Approx total steps:', num_periods * (n_on + n_post))
 print('Saved points:', len(positions_um))
 
-# Plotting.
+# ---------------------- Plotting ----------------------
 plt.figure(figsize=(12, 10))
 
 xmin, xmax = -3.0, 8.0
@@ -177,6 +171,7 @@ A_snapshot = A_fit
 rr = np.sqrt(XX**2 + YY**2)
 TT = A_snapshot * np.exp(-k_fit * (rr * 1e6)) + C_fit
 
+# LogNorm requires strictly positive values.
 TT_safe = np.clip(TT, 1e-6, None)
 
 im = plt.imshow(
@@ -220,7 +215,7 @@ plt.scatter(
     label='End',
 )
 
-# Draw the laser waist and outer laser boundary (visualization only).
+# Laser boundaries (visualization only).
 laser_waist_um = 1.35
 for laser_radius_um in (laser_waist_um, 2 * laser_waist_um):
     plt.gca().add_patch(
@@ -236,7 +231,7 @@ for laser_radius_um in (laser_waist_um, 2 * laser_waist_um):
         )
     )
 
-# Draw the particle boundary at its initial position (visualization only).
+# Initial particle boundary (visualization only).
 plt.gca().add_patch(
     plt.Circle(
         (r0_um, 0.0),
@@ -256,5 +251,5 @@ plt.xlabel('x (µm)')
 plt.ylabel('y (µm)')
 plt.grid(True, linestyle='--', alpha=0.4)
 plt.legend()
-plt.savefig('pulsed-laser.png')
+plt.savefig('pulsed.pdf')
 plt.show()
