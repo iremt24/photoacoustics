@@ -10,6 +10,11 @@ T_data_C, D_th_data_scaled = np.loadtxt(
 T_data_K = T_data_C + 273.15
 D_th_data_SI = D_th_data_scaled * 1e-12
 
+# Sort the table before interpolation.
+order = np.argsort(T_data_K)
+T_data_K = T_data_K[order]
+D_th_data_SI = D_th_data_SI[order]
+
 print(D_th_data_SI)
 print(T_data_K)
 
@@ -21,7 +26,6 @@ T = T_C + 273.15
 
 def model(x, A, k, C):
     return A * np.exp(-k * x) + C
-
 
 
 A0 = T[0] - T[-1]
@@ -42,7 +46,7 @@ yfit = model(xfit, *popt)
 
 plt.scatter(d, T, label='data (K)')
 plt.plot(xfit, yfit, label='exp fit (K)')
-plt.xlabel('d')
+plt.xlabel('d (µm)')
 plt.ylabel('T (K)')
 plt.legend()
 plt.show()
@@ -57,9 +61,6 @@ k_B = 1.3806e-23
 
 gamma = 6 * np.pi * eta * R
 D_t = k_B * T_ref / gamma
-
-# Particle mass for inertial update.
-m = 1.0e-13
 
 # Fixed temperature-fit constants retained from the original simulation.
 A_fit = 47487805.196155205
@@ -80,7 +81,14 @@ total_time = 5.0
 num_periods = int(np.round(total_time / period))
 
 n_on = int(np.round(pulse_width / dt_on))
-n_post = int(np.round((period - pulse_width) / dt_off))
+# The final OFF step is shorter, so every cycle lasts exactly one period.
+off_duration = period - n_on * dt_on
+n_off_full = int(np.floor(off_duration / dt_off + 1e-10))
+off_remainder = off_duration - n_off_full * dt_off
+if off_remainder < 1e-15:
+    off_remainder = 0.0
+if off_remainder < 0:
+    raise ValueError('Invalid OFF remainder')
 
 save_every_periods = 10
 
@@ -89,102 +97,129 @@ r0_um = 3.35
 r = np.array([r0_um, 0.0]) * 1e-6
 positions = [r.copy()]
 
-# Position history; initially zero velocity.
-r_im1 = r.copy()
-r_im2 = r.copy()
-
 # ---------------------- Functions ----------------------
-
 def temperature_and_grad(r_xy, A_now):
     x, y = r_xy
-    rr = np.sqrt(x**2 + y**2)
+    rr = np.hypot(x, y)
     rr_um = rr * 1e6
 
     T_local = A_now * np.exp(-k_fit * rr_um) + C_fit
 
-    # Convert the radial derivative from per micrometer to per meter.
-    dT_dr = (
-        -A_now * k_fit * np.exp(-k_fit * rr_um)
-    ) * 1e6
+    # Convert temperature gradient from K/µm to K/m.
+    dT_dr = -A_now * k_fit * np.exp(-k_fit * rr_um) * 1e6
 
-    eps = 1e-30
-    ux = x / (rr + eps)
-    uy = y / (rr + eps)
-
-    grad_T_local = dT_dr * np.array([ux, uy])
+    if rr == 0.0:
+        grad_T_local = np.zeros(2)
+    else:
+        grad_T_local = dT_dr * r_xy / rr
     return T_local, grad_T_local
 
+
 def D_th(T_local):
-    T_local = np.clip(T_local, T_data_K[0], T_data_K[-1])
+    # Use endpoint values outside the tabulated temperature range.
     return np.interp(T_local, T_data_K, D_th_data_SI)
+
 
 def decay_amp(A_now, dt):
     return A_now * np.exp(-dt / tau_cool)
 
-def inertial_position_update(x_im1, x_im2, dt, T_local):
-    """
-    Implement the notebook's Eq. (6) update component-wise in 2D.
+# ---------------------- Inertial functions ----------------------
+m = 1.0e-13
+v = np.zeros(2)
 
-    x_im1: previous position
-    x_im2: position two steps earlier
-    """
-    denom = 1.0 + dt * (gamma / m)
-    a = (2.0 + dt * (gamma / m)) / denom
-    b = -1.0 / denom
 
-    noise_coeff = (
-        np.sqrt(2.0 * k_B * T_local * gamma)
-        / (m * denom)
-    ) * dt**1.5
-
-    w = np.random.normal(size=2)
-    return a * x_im1 + b * x_im2 + noise_coeff * w
+def inertial_position_update(r, v, dt, T_local):
+    # Friction and thermal noise, then thermophoretic displacement splitting.
+    # A velocity state preserves the inertia across changing time steps.
+    noise = np.sqrt(2 * k_B * T_local * gamma * dt) * np.random.normal(size=2)
+    v_new = (v + noise / m) / (1.0 + gamma * dt / m)
+    return r + v_new * dt, v_new
 
 
 # ---------------------- Simulation ----------------------
+FILE_PREFIX = 'pulsed-mass-direct'
 A_t = 0.0
 
 for p in range(num_periods):
     # Laser ON.
     A_t = A_fit
-
     for i in range(n_on):
         T_local, grad_T_local = temperature_and_grad(r, A_t)
         drift = -D_th(T_local) * grad_T_local * dt_on
-
-        r_free = inertial_position_update(
-            r_im1, r_im2, dt_on, T_local
-        )
-        r = r_free + drift
-
-        r_im2 = r_im1
-        r_im1 = r
+        r, v = inertial_position_update(r, v, dt_on, T_local)
+        r = r + drift
 
     # Laser OFF: exponentially decaying cooling.
-    for i in range(n_post):
-        A_t = decay_amp(A_t, dt_off)
+    off_steps = [dt_off] * n_off_full
+    if off_remainder:
+        off_steps.append(off_remainder)
+    for dt in off_steps:
+        A_t = decay_amp(A_t, dt)
         T_local, grad_T_local = temperature_and_grad(r, A_t)
-        drift = -D_th(T_local) * grad_T_local * dt_off
-
-        r_free = inertial_position_update(
-            r_im1, r_im2, dt_off, T_local
-        )
-        r = r_free + drift
-
-        r_im2 = r_im1
-        r_im1 = r
+        drift = -D_th(T_local) * grad_T_local * dt
+        r, v = inertial_position_update(r, v, dt, T_local)
+        r = r + drift
 
     if p % save_every_periods == 0:
         positions.append(r.copy())
 
+# ---------------------- MSD calculation ----------------------
 positions = np.array(positions)
 positions_um = positions * 1e6
 
+# The initial position is t=0; subsequent positions are saved after
+# periods 1, 11, 21, ... because p is zero-indexed.
+saved_periods = np.r_[0, np.arange(1, num_periods + 1, save_every_periods)]
+times = saved_periods * period
+assert len(times) == len(positions_um)
+
+# Displacement squared from the starting position (one trajectory).
+dr0_um = positions_um - positions_um[0]
+squared_displacement = np.sum(dr0_um**2, axis=1)
+
+# Time-averaged MSD from uniformly spaced recorded points. Exclude the
+# initial position because the first interval differs from later intervals.
+trajectory = positions_um[1:]
+max_lag = len(trajectory) // 2
+lag_times = np.arange(1, max_lag + 1) * save_every_periods * period
+msd_time_averaged = np.empty(max_lag)
+for lag in range(1, max_lag + 1):
+    dr = trajectory[lag:] - trajectory[:-lag]
+    msd_time_averaged[lag - 1] = np.mean(np.sum(dr**2, axis=1))
+
 print('Total simulated time (s):', num_periods * period)
 print('Periods:', num_periods)
-print('Steps per period:', n_on + n_post)
-print('Approx total steps:', num_periods * (n_on + n_post))
+print('Steps per period:', n_on + n_off_full + int(off_remainder > 0))
+print('Approx total steps:', num_periods * (n_on + n_off_full + int(off_remainder > 0)))
 print('Saved points:', len(positions_um))
+print('Final squared displacement (µm²):', squared_displacement[-1])
+
+# ---------------------- MSD plotting ----------------------
+plt.figure(figsize=(10, 6))
+plt.plot(times, squared_displacement, color='black', lw=1.1,
+         label='Squared displacement from start')
+plt.plot(times, 4 * D_t * 1e12 * times, 'r--',
+         label=r'Free diffusion reference: $4D_t t$')
+plt.xlabel('Time (s)')
+plt.ylabel(r'Squared displacement ($\mu\mathrm{m}^2$)')
+plt.grid(True, linestyle='--', alpha=0.4)
+plt.legend()
+plt.tight_layout()
+plt.savefig(FILE_PREFIX + '-squared-displacement.pdf')
+plt.show()
+
+plt.figure(figsize=(10, 6))
+plt.plot(lag_times, msd_time_averaged, color='black', lw=1.1,
+         label='Time-averaged MSD')
+plt.plot(lag_times, 4 * D_t * 1e12 * lag_times, 'r--',
+         label=r'Free diffusion reference: $4D_t\tau$')
+plt.xlabel('Lag time (s)')
+plt.ylabel(r'MSD ($\mu\mathrm{m}^2$)')
+plt.grid(True, linestyle='--', alpha=0.4)
+plt.legend()
+plt.tight_layout()
+plt.savefig(FILE_PREFIX + '-time-averaged-msd.pdf')
+plt.show()
 
 # ---------------------- Plotting ----------------------
 plt.figure(figsize=(12, 10))
@@ -200,7 +235,7 @@ XX, YY = np.meshgrid(xx, yy)
 # Laser-ON temperature snapshot.
 A_snapshot = A_fit
 rr = np.sqrt(XX**2 + YY**2)
-TT = A_snapshot * np.exp(-k_fit * rr * 1e6) + C_fit
+TT = A_snapshot * np.exp(-k_fit * (rr * 1e6)) + C_fit
 
 # LogNorm requires strictly positive values.
 TT_safe = np.clip(TT, 1e-6, None)
@@ -216,36 +251,37 @@ im = plt.imshow(
 )
 
 plt.colorbar(
-     im,
-     label='Temperature (K, log scale)',
-     shrink=0.55,
-     aspect=30,
-     pad=0.02,
- )
+    im,
+    label='Temperature (K, log scale)',
+    shrink=0.55,
+    aspect=30,
+    pad=0.02,
+)
 
 plt.plot(
     positions_um[:, 0],
     positions_um[:, 1],
     lw=1.0,
     color='black',
-    zorder=2,
-    label=fr'trajectory ($m = {m:.1e}\ \mathrm{{kg}}$)',
+    label='Trajectory',
 )
+
 plt.scatter(
     positions_um[0, 0],
     positions_um[0, 1],
     s=70,
     c='green',
     label='Start',
-    zorder=3,
+    zorder=10,
 )
+
 plt.scatter(
     positions_um[-1, 0],
     positions_um[-1, 1],
     s=70,
     c='purple',
     label='End',
-    zorder=3,
+    zorder=10,
 )
 
 # Laser boundaries (visualization only).
@@ -284,5 +320,5 @@ plt.xlabel('x (µm)')
 plt.ylabel('y (µm)')
 plt.grid(True, linestyle='--', alpha=0.4)
 plt.legend()
-plt.savefig('pulsed-mass-direct.pdf')
+plt.savefig(FILE_PREFIX + '.pdf')
 plt.show()
