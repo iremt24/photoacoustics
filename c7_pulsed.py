@@ -1,6 +1,3 @@
-Here is `pulsed-original` as one copyable `.py` script. The CSV data is embedded, preserving the original `skiprows=1` behavior.
-
-```python
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
