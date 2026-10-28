@@ -10,6 +10,11 @@ T_data_C, D_th_data_scaled = np.loadtxt(
 T_data_K = T_data_C + 273.15
 D_th_data_SI = D_th_data_scaled * 1e-12
 
+# Sort the table before interpolation.
+order = np.argsort(T_data_K)
+T_data_K = T_data_K[order]
+D_th_data_SI = D_th_data_SI[order]
+
 print(D_th_data_SI)
 print(T_data_K)
 
@@ -41,7 +46,7 @@ yfit = model(xfit, *popt)
 
 plt.scatter(d, T, label='data (K)')
 plt.plot(xfit, yfit, label='exp fit (K)')
-plt.xlabel('d')
+plt.xlabel('d (µm)')
 plt.ylabel('T (K)')
 plt.legend()
 plt.show()
@@ -76,7 +81,14 @@ total_time = 5.0
 num_periods = int(np.round(total_time / period))
 
 n_on = int(np.round(pulse_width / dt_on))
-n_post = int(np.round((period - pulse_width) / dt_off))
+# The final OFF step is shorter, so every cycle lasts exactly one period.
+off_duration = period - n_on * dt_on
+n_off_full = int(np.floor(off_duration / dt_off + 1e-10))
+off_remainder = off_duration - n_off_full * dt_off
+if off_remainder < 1e-15:
+    off_remainder = 0.0
+if off_remainder < 0:
+    raise ValueError('Invalid OFF remainder')
 
 save_every_periods = 10
 
@@ -85,12 +97,10 @@ r0_um = 3.35
 r = np.array([r0_um, 0.0]) * 1e-6
 positions = [r.copy()]
 
-
 # ---------------------- Functions ----------------------
-
 def temperature_and_grad(r_xy, A_now):
     x, y = r_xy
-    rr = np.sqrt(x**2 + y**2)
+    rr = np.hypot(x, y)
     rr_um = rr * 1e6
 
     T_local = A_now * np.exp(-k_fit * rr_um) + C_fit
@@ -98,62 +108,105 @@ def temperature_and_grad(r_xy, A_now):
     # Convert temperature gradient from K/µm to K/m.
     dT_dr = -A_now * k_fit * np.exp(-k_fit * rr_um) * 1e6
 
-    eps = 1e-30
-    ux = x / (rr + eps)
-    uy = y / (rr + eps)
-
-    grad_T_local = dT_dr * np.array([ux, uy])
+    if rr == 0.0:
+        grad_T_local = np.zeros(2)
+    else:
+        grad_T_local = dT_dr * r_xy / rr
     return T_local, grad_T_local
 
+
 def D_th(T_local):
-    T_local = np.clip(T_local, T_data_K[0], T_data_K[-1])
+    # Use endpoint values outside the tabulated temperature range.
     return np.interp(T_local, T_data_K, D_th_data_SI)
+
 
 def decay_amp(A_now, dt):
     return A_now * np.exp(-dt / tau_cool)
 
-
-sqrt_2D_on = np.sqrt(2.0 * D_t * dt_on)
-sqrt_2D_off = np.sqrt(2.0 * D_t * dt_off)
-
 # ---------------------- Simulation ----------------------
+FILE_PREFIX = 'pulsed'
 A_t = 0.0
 
 for p in range(num_periods):
     # Laser ON.
     A_t = A_fit
-
-    if n_on > 0:
-        noise = np.random.normal(size=(n_on, 2))
-
-        for i in range(n_on):
-            T_local, grad_T_local = temperature_and_grad(r, A_t)
-            drift = -D_th(T_local) * grad_T_local * dt_on
-            brown = sqrt_2D_on * noise[i]
-            r = r + drift + brown
+    for i in range(n_on):
+        T_local, grad_T_local = temperature_and_grad(r, A_t)
+        drift = -D_th(T_local) * grad_T_local * dt_on
+        brown = np.sqrt(2 * D_t * dt_on) * np.random.normal(size=2)
+        r = r + drift + brown
 
     # Laser OFF: exponentially decaying cooling.
-    if n_post > 0:
-        noise = np.random.normal(size=(n_post, 2))
-
-        for i in range(n_post):
-            A_t = decay_amp(A_t, dt_off)
-            T_local, grad_T_local = temperature_and_grad(r, A_t)
-            drift = -D_th(T_local) * grad_T_local * dt_off
-            brown = sqrt_2D_off * noise[i]
-            r = r + drift + brown
+    off_steps = [dt_off] * n_off_full
+    if off_remainder:
+        off_steps.append(off_remainder)
+    for dt in off_steps:
+        A_t = decay_amp(A_t, dt)
+        T_local, grad_T_local = temperature_and_grad(r, A_t)
+        drift = -D_th(T_local) * grad_T_local * dt
+        brown = np.sqrt(2 * D_t * dt) * np.random.normal(size=2)
+        r = r + drift + brown
 
     if p % save_every_periods == 0:
         positions.append(r.copy())
 
+# ---------------------- MSD calculation ----------------------
 positions = np.array(positions)
 positions_um = positions * 1e6
 
+# The initial position is t=0; subsequent positions are saved after
+# periods 1, 11, 21, ... because p is zero-indexed.
+saved_periods = np.r_[0, np.arange(1, num_periods + 1, save_every_periods)]
+times = saved_periods * period
+assert len(times) == len(positions_um)
+
+# Displacement squared from the starting position (one trajectory).
+dr0_um = positions_um - positions_um[0]
+squared_displacement = np.sum(dr0_um**2, axis=1)
+
+# Time-averaged MSD from uniformly spaced recorded points. Exclude the
+# initial position because the first interval differs from later intervals.
+trajectory = positions_um[1:]
+max_lag = len(trajectory) // 2
+lag_times = np.arange(1, max_lag + 1) * save_every_periods * period
+msd_time_averaged = np.empty(max_lag)
+for lag in range(1, max_lag + 1):
+    dr = trajectory[lag:] - trajectory[:-lag]
+    msd_time_averaged[lag - 1] = np.mean(np.sum(dr**2, axis=1))
+
 print('Total simulated time (s):', num_periods * period)
 print('Periods:', num_periods)
-print('Steps per period:', n_on + n_post)
-print('Approx total steps:', num_periods * (n_on + n_post))
+print('Steps per period:', n_on + n_off_full + int(off_remainder > 0))
+print('Approx total steps:', num_periods * (n_on + n_off_full + int(off_remainder > 0)))
 print('Saved points:', len(positions_um))
+print('Final squared displacement (µm²):', squared_displacement[-1])
+
+# ---------------------- MSD plotting ----------------------
+plt.figure(figsize=(10, 6))
+plt.plot(times, squared_displacement, color='black', lw=1.1,
+         label='Squared displacement from start')
+plt.plot(times, 4 * D_t * 1e12 * times, 'r--',
+         label=r'Free diffusion reference: $4D_t t$')
+plt.xlabel('Time (s)')
+plt.ylabel(r'Squared displacement ($\mu\mathrm{m}^2$)')
+plt.grid(True, linestyle='--', alpha=0.4)
+plt.legend()
+plt.tight_layout()
+plt.savefig(FILE_PREFIX + '-squared-displacement.pdf')
+plt.show()
+
+plt.figure(figsize=(10, 6))
+plt.plot(lag_times, msd_time_averaged, color='black', lw=1.1,
+         label='Time-averaged MSD')
+plt.plot(lag_times, 4 * D_t * 1e12 * lag_times, 'r--',
+         label=r'Free diffusion reference: $4D_t\tau$')
+plt.xlabel('Lag time (s)')
+plt.ylabel(r'MSD ($\mu\mathrm{m}^2$)')
+plt.grid(True, linestyle='--', alpha=0.4)
+plt.legend()
+plt.tight_layout()
+plt.savefig(FILE_PREFIX + '-time-averaged-msd.pdf')
+plt.show()
 
 # ---------------------- Plotting ----------------------
 plt.figure(figsize=(12, 10))
@@ -197,6 +250,7 @@ plt.plot(
     positions_um[:, 1],
     lw=1.0,
     color='black',
+    label='Trajectory',
 )
 
 plt.scatter(
@@ -216,7 +270,6 @@ plt.scatter(
     label='End',
     zorder=10,
 )
-
 
 # Laser boundaries (visualization only).
 laser_waist_um = 1.35
@@ -254,5 +307,5 @@ plt.xlabel('x (µm)')
 plt.ylabel('y (µm)')
 plt.grid(True, linestyle='--', alpha=0.4)
 plt.legend()
-plt.savefig('pulsed.pdf')
+plt.savefig(FILE_PREFIX + '.pdf')
 plt.show()
