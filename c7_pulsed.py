@@ -53,9 +53,9 @@ plt.show()
 
 np.random.seed(24)
 
-R = 2.0e-6
+R = 2.05e-6
 eta = 1.0e-3
-T_ref = 298.0
+T_ref = 300.0
 k_B = 1.3806e-23
 
 gamma = 6 * np.pi * eta * R
