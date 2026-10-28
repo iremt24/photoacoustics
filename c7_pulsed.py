@@ -205,6 +205,7 @@ plt.scatter(
     s=70,
     c='green',
     label='Start',
+    zorder=10,
 )
 
 plt.scatter(
@@ -213,7 +214,9 @@ plt.scatter(
     s=70,
     c='purple',
     label='End',
+    zorder=10,
 )
+
 
 # Laser boundaries (visualization only).
 laser_waist_um = 1.35
