@@ -4,13 +4,13 @@ from scipy.optimize import curve_fit
 from matplotlib.colors import LogNorm
 
 # Load thermophoretic mobility data.
-T_data_C, DTplot = np.loadtxt(
-    "braibanti-fig3.csv", delimiter=",", skiprows=1
+T_data_C, D_th_data_scaled = np.loadtxt(
+    'braibanti-fig3.csv', delimiter=',', skiprows=1
 ).T
 T_data_K = T_data_C + 273.15
-DT_SI = DTplot * 1e-12
+D_th_data_SI = D_th_data_scaled * 1e-12
 
-print(DT_SI)
+print(D_th_data_SI)
 print(T_data_K)
 
 # Fit an exponential temperature profile.
@@ -31,20 +31,20 @@ p0 = [A0, k0, C0]
 popt, pcov = curve_fit(model, d, T, p0=p0)
 A, k, C = popt
 
-print("Fit parameters:")
-print("A =", A)
-print("k =", k)
-print("C =", C)
+print('Fit parameters:')
+print('A =', A)
+print('k =', k)
+print('C =', C)
 
 xfit = np.linspace(min(d), max(d), 200)
 yfit = model(xfit, *popt)
 
-plt.scatter(d, T, label="data (K)")
-plt.plot(xfit, yfit, label="exp fit (K)")
-plt.xlabel("d")
-plt.ylabel("T (K)")
+plt.scatter(d, T, label='data (K)')
+plt.plot(xfit, yfit, label='exp fit (K)')
+plt.xlabel('d')
+plt.ylabel('T (K)')
 plt.legend()
-plt.savefig("exp-fit.png")
+plt.savefig('exp-fit.png')
 plt.show()
 
 # Simulation parameters.
@@ -52,11 +52,11 @@ np.random.seed(24)
 
 R = 2.0e-6
 eta = 1.0e-3
-T0 = 300.0
+T_ref = 300.0
 k_B = 1.3806e-23
 
 gamma = 6 * np.pi * eta * R
-D_brown = k_B * T0 / gamma
+D_t = k_B * T_ref / gamma
 
 # Preserve the fitted constants used in the notebook simulation.
 A_fit = 47487805.196155205
@@ -96,19 +96,19 @@ def gradT(x, y):
     return dT_dr * np.array([ux, uy])
 
 
-def D_T(T_loc):
+def D_th(T_local):
     """Temperature-dependent thermophoretic mobility [m^2/(s*K)]."""
-    T_loc = np.clip(T_loc, T_data_K[0], T_data_K[-1])
-    return np.interp(T_loc, T_data_K, DT_SI)
+    T_local = np.clip(T_local, T_data_K[0], T_data_K[-1])
+    return np.interp(T_local, T_data_K, D_th_data_SI)
 
 
 for step in range(num_steps):
     x, y = r
-    T_loc = temperature(x, y)
-    gradT_loc = gradT(x, y)
+    T_local = temperature(x, y)
+    grad_T_local = gradT(x, y)
 
-    drift = -D_T(T_loc) * gradT_loc * dt
-    brown = np.sqrt(2 * D_brown * dt) * np.random.normal(size=2)
+    drift = -D_th(T_local) * grad_T_local * dt
+    brown = np.sqrt(2 * D_t * dt) * np.random.normal(size=2)
     r = r + drift + brown
 
     if step % save_interval == 0:
@@ -135,16 +135,16 @@ TT_safe = np.clip(TT, 1e-6, None)
 im = plt.imshow(
     TT_safe,
     extent=[xmin, xmax, ymin, ymax],
-    origin="lower",
-    cmap="coolwarm",
+    origin='lower',
+    cmap='coolwarm',
     norm=LogNorm(vmin=TT_safe.min(), vmax=TT_safe.max()),
-    aspect="equal",
+    aspect='equal',
     alpha=0.8,
 )
 
 plt.colorbar(
     im,
-    label="Temperature (K, log scale)",
+    label='Temperature (K, log scale)',
     shrink=0.55,
     aspect=30,
     pad=0.02,
@@ -154,31 +154,31 @@ plt.plot(
     positions_um[:, 0],
     positions_um[:, 1],
     lw=1.0,
-    color="black",
+    color='black',
     zorder=2,
 )
 plt.scatter(
     positions_um[0, 0],
     positions_um[0, 1],
     s=70,
-    c="green",
-    label="start",
+    c='green',
+    label='Start',
     zorder=3,
 )
 plt.scatter(
     positions_um[-1, 0],
     positions_um[-1, 1],
     s=70,
-    c="purple",
-    label="end",
+    c='purple',
+    label='End',
     zorder=3,
 )
 
 plt.xlim(xmin, xmax)
 plt.ylim(ymin, ymax)
-plt.xlabel("x (µm)")
-plt.ylabel("y (µm)")
-plt.grid(True, linestyle="--", alpha=0.4)
+plt.xlabel('x (µm)')
+plt.ylabel('y (µm)')
+plt.grid(True, linestyle='--', alpha=0.4)
 plt.legend()
-# plt.savefig("exponential.png")
+# plt.savefig('exponential.png')
 plt.show()
