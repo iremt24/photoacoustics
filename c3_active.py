@@ -6,30 +6,30 @@ np.random.seed(24)
 # Parameters and constants
 R = 1.0e-6          # Particle radius (1 micrometer) [m]
 eta = 1.0e-3        # Water viscosity [Pa*s]
-T_ref = 300.0           # Temperature [K]
+T_ref = 300.0       # Reference temperature [K]
 k_B = 1.3806e-23    # Boltzmann constant [J/K]
 
 # Active motion parameters
 v = 5.0e-6          # Self-propulsion speed [m/s]
-theta_0 = 0.0        # Initial orientation fixed at 0 [rad]
+theta_0 = 0.0       # Initial orientation fixed at 0 [rad]
 
 # Derived constants
 gamma = 6 * np.pi * eta * R                 # Friction coefficient [N*s/m], given by Stokes formula
-D_t = k_B * T_ref / gamma                       # Translational diffusion coefficient [m^2/s], given by Einstein relation
-D_r = k_B * T_ref / (8 * np.pi * eta * R**3)    # Rotational diffusion coefficient [1/s], see Biological Physics p. 140
+D_t = k_B * T_ref / gamma                  # Translational diffusion coefficient [m^2/s], given by Einstein relation
+D_r = k_B * T_ref / (8 * np.pi * eta * R**3)  # Rotational diffusion coefficient [1/s], see Biological Physics p. 140
 
 # Simulation parameters
 dt = 1.0e-5         # Time step [s]
 num_steps = 50000   # Total number of steps (0.5 s)
 save_interval = 50  # Save every 'save_interval' steps
 
-# Initilization
+# Initialization
 r = np.array([0.0, 0.0])  # Initial position [m] -> (x, y)
-theta = theta_0            # Initial orientation [rad]
+theta = theta_0          # Initial orientation [rad]
 positions = []
 times = []
 
-# Main Loop
+# Main loop
 for step in range(num_steps):
     direction = np.array([np.cos(theta), np.sin(theta)])
     active_displacement = v * dt * direction
@@ -44,7 +44,7 @@ for step in range(num_steps):
         positions.append(r.copy())
         times.append(step * dt)
 
-positions = np.array(positions)      # shape (N, 2)
+positions = np.array(positions)  # shape (N, 2)
 times = np.array(times)
 
 # Convert positions to micrometers (um) for plots
@@ -62,5 +62,5 @@ plt.title('Trajectory of Active Brownian Particle')
 plt.axis('equal')
 plt.legend()
 plt.grid(True, linestyle='--', alpha=0.6)
-plt.savefig("active.png")
+plt.savefig('active.png')
 plt.show()
