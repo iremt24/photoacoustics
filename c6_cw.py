@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from matplotlib.colors import LogNorm
 
-# Load thermophoretic mobility data.
+# ---------------------- Thermophoretic mobility data ----------------------
 T_data_C, D_th_data_scaled = np.loadtxt(
     'braibanti-fig3.csv', delimiter=',', skiprows=1
 ).T
@@ -13,7 +13,7 @@ D_th_data_SI = D_th_data_scaled * 1e-12
 print(D_th_data_SI)
 print(T_data_K)
 
-# Fit an exponential temperature profile.
+# ---------------------- Temperature profile fit ----------------------
 d = np.array([3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 5.0])
 T_C = np.array([48, 41, 35, 31, 28, 27, 26, 25])
 T = T_C + 273.15
@@ -47,7 +47,7 @@ plt.legend()
 plt.savefig('exp-fit.png')
 plt.show()
 
-# Simulation parameters.
+# ---------------------- Physical parameters ----------------------
 np.random.seed(24)
 
 R = 2.05e-6
@@ -58,21 +58,23 @@ k_B = 1.3806e-23
 gamma = 6 * np.pi * eta * R
 D_t = k_B * T_ref / gamma
 
-# Preserve the fitted constants used in the notebook simulation.
+# Fixed temperature-fit constants retained from the original simulation.
 A_fit = 47487805.196155205
 k_fit = 4.262380207691129
 C_fit = 297.5165761061297
 
+# ---------------------- Time steps ----------------------
 dt = 1e-8
 num_steps = 50000000
 save_interval = 50
 
-# Start along the +x axis, away from the source at the origin.
-r0_um = 3.0
+# ---------------------- Initial position ----------------------
+r0_um = 3.35
 r = np.array([r0_um, 0.0]) * 1e-6
 positions = []
 
 
+# ---------------------- Functions ----------------------
 def temperature(x, y):
     rr = np.sqrt(x**2 + y**2)
     rr_um = rr * 1e6
@@ -102,6 +104,7 @@ def D_th(T_local):
     return np.interp(T_local, T_data_K, D_th_data_SI)
 
 
+# ---------------------- Simulation ----------------------
 for step in range(num_steps):
     x, y = r
     T_local = temperature(x, y)
@@ -117,7 +120,7 @@ for step in range(num_steps):
 positions = np.array(positions)
 positions_um = positions * 1e6
 
-# Plot the trajectory over the temperature field.
+# ---------------------- Plotting ----------------------
 plt.figure(figsize=(12, 10))
 
 xmin, xmax = -3.0, 8.0
@@ -174,7 +177,7 @@ plt.scatter(
     zorder=3,
 )
 
-# Draw the laser waist and outer laser boundary (visualization only).
+# Laser boundaries (visualization only).
 laser_waist_um = 1.35
 for laser_radius_um in (laser_waist_um, 2 * laser_waist_um):
     plt.gca().add_patch(
@@ -190,7 +193,7 @@ for laser_radius_um in (laser_waist_um, 2 * laser_waist_um):
         )
     )
 
-# Draw the particle boundary at its initial position (visualization only).
+# Initial particle boundary (visualization only).
 plt.gca().add_patch(
     plt.Circle(
         (r0_um, 0.0),
@@ -210,5 +213,5 @@ plt.xlabel('x (µm)')
 plt.ylabel('y (µm)')
 plt.grid(True, linestyle='--', alpha=0.4)
 plt.legend()
-# plt.savefig('exponential.png')
+plt.savefig('cw.pdf')
 plt.show()
