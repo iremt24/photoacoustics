@@ -3,10 +3,9 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from scipy.optimize import curve_fit
 
-
 # ---------------------- Load thermophoresis data ----------------------
 T_data_C, D_th_data_scaled = np.loadtxt(
-    "braibanti-fig3.csv", delimiter=",", skiprows=1
+    'braibanti-fig3.csv', delimiter=',', skiprows=1
 ).T
 
 T_data_K = T_data_C + 273.15
@@ -14,7 +13,6 @@ D_th_data_SI = D_th_data_scaled * 1e-12
 
 print(D_th_data_SI)
 print(T_data_K)
-
 
 # ---------------------- Fit temperature profile ----------------------
 d = np.array([3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 5.0])
@@ -30,21 +28,20 @@ p0 = [T[0] - T[-1], 1.0, T[-1]]
 popt, pcov = curve_fit(model, d, T, p0=p0)
 A, k, C = popt
 
-print("Fit parameters:")
-print("A =", A)
-print("k =", k)
-print("C =", C)
+print('Fit parameters:')
+print('A =', A)
+print('k =', k)
+print('C =', C)
 
 xfit = np.linspace(min(d), max(d), 200)
 yfit = model(xfit, *popt)
 
-plt.scatter(d, T, label="data (K)")
-plt.plot(xfit, yfit, label="exp fit (K)")
-plt.xlabel("d")
-plt.ylabel("T (K)")
+plt.scatter(d, T, label='data (K)')
+plt.plot(xfit, yfit, label='exp fit (K)')
+plt.xlabel('d')
+plt.ylabel('T (K)')
 plt.legend()
 plt.show()
-
 
 # ---------------------- Physical parameters ----------------------
 np.random.seed(24)
@@ -64,7 +61,6 @@ A_fit = 47487805.196155205
 k_fit = 4.262380207691129
 C_fit = 297.5165761061297
 
-
 # ---------------------- Pulse schedule ----------------------
 period = 100e-6
 pulse_start = 0.0
@@ -82,7 +78,6 @@ n_post = int(np.round((period - pulse_width) / dt_off))
 
 save_every_periods = 10
 
-
 # ---------------------- Initial position ----------------------
 r0_um = 3.0
 r = np.array([r0_um, 0.0]) * 1e-6
@@ -91,7 +86,6 @@ positions = [r.copy()]
 # Zero initial velocity.
 r_im1 = r.copy()
 r_im2 = r.copy()
-
 
 # ---------------------- Functions ----------------------
 def D_th(T_local):
@@ -151,7 +145,6 @@ def inertial_position_update(
     denominator = m + gamma * dt
     return numerator / denominator
 
-
 # ---------------------- Simulation ----------------------
 A_t = 0.0
 
@@ -199,12 +192,11 @@ for p in range(num_periods):
 positions = np.array(positions)
 positions_um = positions * 1e6
 
-print("Total simulated time (s):", num_periods * period)
-print("Periods:", num_periods)
-print("Steps per period:", n_on + n_post)
-print("Approx total steps:", num_periods * (n_on + n_post))
-print("Saved points:", len(positions_um))
-
+print('Total simulated time (s):', num_periods * period)
+print('Periods:', num_periods)
+print('Steps per period:', n_on + n_post)
+print('Approx total steps:', num_periods * (n_on + n_post))
+print('Saved points:', len(positions_um))
 
 # ---------------------- Plotting ----------------------
 plt.figure(figsize=(12, 10))
@@ -226,17 +218,17 @@ TT_safe = np.clip(TT, 1e-6, None)
 im = plt.imshow(
     TT_safe,
     extent=[xmin, xmax, ymin, ymax],
-    origin="lower",
-    cmap="coolwarm",
+    origin='lower',
+    cmap='coolwarm',
     norm=LogNorm(vmin=TT_safe.min(), vmax=TT_safe.max()),
-    aspect="equal",
+    aspect='equal',
     alpha=0.8,
 )
 
 # Uncomment to display the temperature colorbar.
 # plt.colorbar(
 #     im,
-#     label="Temperature (K, log scale)",
+#     label='Temperature (K, log scale)',
 #     shrink=0.55,
 #     aspect=30,
 #     pad=0.02,
@@ -246,17 +238,17 @@ plt.plot(
     positions_um[:, 0],
     positions_um[:, 1],
     lw=1.0,
-    color="black",
+    color='black',
     zorder=2,
-    label=fr"trajectory ($m = {m:.1e}\ \mathrm{{kg}}$)",
+    label=fr'trajectory ($m = {m:.1e}\ \mathrm{{kg}}$)',
 )
 
 plt.scatter(
     positions_um[0, 0],
     positions_um[0, 1],
     s=70,
-    c="green",
-    label="start",
+    c='green',
+    label='Start',
     zorder=3,
 )
 
@@ -264,20 +256,20 @@ plt.scatter(
     positions_um[-1, 0],
     positions_um[-1, 1],
     s=70,
-    c="purple",
-    label="end",
+    c='purple',
+    label='End',
     zorder=3,
 )
 
 plt.xlim(xmin, xmax)
 plt.ylim(ymin, ymax)
-plt.xlabel("x (µm)")
-plt.ylabel("y (µm)")
-plt.grid(True, linestyle="--", alpha=0.4)
+plt.xlabel('x (µm)')
+plt.ylabel('y (µm)')
+plt.grid(True, linestyle='--', alpha=0.4)
 plt.legend()
 plt.savefig(
-    f"both_mass_{m:.1e}.png",
-    bbox_inches="tight",
+    f'both_mass_{m:.1e}.png',
+    bbox_inches='tight',
     pad_inches=0.2,
 )
 plt.show()
