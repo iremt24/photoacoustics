@@ -174,6 +174,36 @@ plt.scatter(
     zorder=3,
 )
 
+# Draw the laser waist and outer laser boundary (visualization only).
+laser_waist_um = 1.35
+for laser_radius_um in (laser_waist_um, 2 * laser_waist_um):
+    plt.gca().add_patch(
+        plt.Circle(
+            (0.0, 0.0),
+            laser_radius_um,
+            fill=False,
+            color='orange',
+            linestyle='--',
+            linewidth=1.5,
+            label=f'Laser radius {laser_radius_um:.2f} µm',
+            zorder=4,
+        )
+    )
+
+# Draw the particle boundary at its initial position (visualization only).
+plt.gca().add_patch(
+    plt.Circle(
+        (r0_um, 0.0),
+        R * 1e6,
+        fill=False,
+        color='green',
+        linestyle='--',
+        linewidth=1.5,
+        label='Initial particle boundary',
+        zorder=4,
+    )
+)
+
 plt.xlim(xmin, xmax)
 plt.ylim(ymin, ymax)
 plt.xlabel('x (µm)')
