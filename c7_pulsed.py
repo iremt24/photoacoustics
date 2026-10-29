@@ -185,8 +185,6 @@ print('Final squared displacement (µm²):', squared_displacement[-1])
 plt.figure(figsize=(10, 6))
 plt.plot(times, squared_displacement, color='black', lw=1.1,
          label='Squared displacement from start')
-plt.plot(times, 4 * D_t * 1e12 * times, 'r--',
-         label=r'Free diffusion reference: $4D_t t$')
 plt.xlabel('Time (s)')
 plt.ylabel(r'Squared displacement ($\mu\mathrm{m}^2$)')
 plt.grid(True, linestyle='--', alpha=0.4)
@@ -196,12 +194,11 @@ plt.savefig(FILE_PREFIX + '-squared-displacement.pdf')
 plt.show()
 
 plt.figure(figsize=(10, 6))
-plt.plot(lag_times, msd_time_averaged, color='black', lw=1.1,
+plt.plot(lag_times, msd_time_averaged, color='red', lw=1.1,
          label='Time-averaged MSD')
-plt.plot(lag_times, 4 * D_t * 1e12 * lag_times, 'r--',
-         label=r'Free diffusion reference: $4D_t\tau$')
 plt.xlabel('Lag time (s)')
 plt.ylabel(r'MSD ($\mu\mathrm{m}^2$)')
+plt.title("MSD for pulsed laser simulation")
 plt.grid(True, linestyle='--', alpha=0.4)
 plt.legend()
 plt.tight_layout()
