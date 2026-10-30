@@ -15,7 +15,7 @@ D_th_data_SI = D_th_data_scaled * 1e-12
 print(D_th_data_SI)
 print(T_data_K)
 
-# ---------------------- Temperature measurements ----------------------
+# ---------------------- Temperature simulation data ----------------------
 d = np.array([3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 5.0])
 T_C = np.array([48, 41, 35, 31, 28, 27, 26, 25])
 
@@ -69,7 +69,7 @@ def load_temperature(filename):
         raise ValueError(f"Time and temperature lengths differ in {filename}")
     return time, temperature
 
-# ---------------------- Plotting ----------------------
+# ---------------------- Plotting COMSOL data ----------------------
 fig_comsol, axes_comsol = plt.subplots(1, 2, figsize=(12, 4))
 comsol_profiles = [
     ("3.4 µm", "Gold-50nJ-MAX.txt", "Gold-50nJ-Min.txt"),
@@ -242,7 +242,7 @@ xmax = max(8.0, positions_constant_D_90s_um[:, 0].max() + 0.5)
 ymin = min(-3.0, positions_constant_D_90s_um[:, 1].min() - 0.5)
 ymax = max(3.0, positions_constant_D_90s_um[:, 1].max() + 0.5)
 
-# The spatial temperature fit provides the background, not the propulsion field.
+# The spatial temperature fit provides the background, only for visualization.
 A_fit, k_fit, C_fit = popt
 xx, yy = np.meshgrid(np.linspace(xmin, xmax, 320), np.linspace(ymin, ymax, 320))
 TT = A_fit * np.exp(-k_fit * np.sqrt(xx**2 + yy**2)) + C_fit
